@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Week 4 water segmentation  deployment with Flask</title>
+    
+    <!-- Modern Typography: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- Subtle Background Atmosphere -->
+    <div class="tech-grid-bg"></div>
+    <div class="ambient-glow glow-top"></div>
+    <div class="ambient-glow glow-bottom"></div>
+
+    <div class="app-layout">
+        <!-- Top Navigation -->
+        <header class="navbar">
+            <div class="nav-title-group">
+                <h1 class="nav-main-title">Week 4 water segmentation  deployment with Flask</h1>
+                <button type="button" class="btn-sensor-info" id="btn-sensor-modal" title="View Sentinel-2 band wavelengths & MNDWI formula">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="12" y1="16" x2="12" y2="12"></line>
+                        <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                    </svg>
+                    Sensor Specs
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <div class="workspace">
+            <!-- Sidebar: Parameters & Input -->
+            <aside class="sidebar">
+                <!-- Section 1: Model & Tuning -->
+                <div class="card card-sidebar">
+                    <div class="card-title-row">
+                        <span class="card-label">Configuration</span>
+                        <span class="card-badge">Step 1</span>
+                    </div>
+
+                    <!-- Model Picker -->
+                    <div class="field">
+                        <label for="model-select">Segmentation Architecture</label>
+                        <div class="select-container">
+                            <select id="model-select" class="select-field">
+                                <option value="se_res_unet" selected>SE-Res-UNet • Best Test IoU (0.7285)</option>
+                                <option value="resnet50_deeplabv3p">ResNet-50 DeepLabV3+ • Zero False Alarm (0.0% FPR)</option>
+                                <option value="resnet34_unet">ResNet-34 U-Net • High Sensitivity (84.2% Recall)</option>
+                            </select>
+                        </div>
+                        <p class="field-help" id="model-help">
+                            Recommended. Lightweight scratch network (8.1M params) with Squeeze-and-Excitation channel attention.
+                        </p>
+                    </div>
+
+                    <!-- Sensitivity Slider -->
+                    <div class="field">
+                        <div class="slider-title-row">
+                            <label for="threshold-slider">Decision Threshold (τ)</label>
+                            <span class="slider-val-box" id="threshold-val">0.30</span>
+                        </div>
+                        <input type="range" id="threshold-slider" min="0.05" max="0.95" step="0.01" value="0.30" class="range-slider">
+                        <div class="range-scale">
+                            <span>0.05 (High Recall)</span>
+                            <button type="button" class="btn-link" id="reset-thresh-btn">Reset (0.30)</button>
+                            <span>0.95 (High Precision)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Upload Dropzone & Test Scenes -->
+                <div class="card card-sidebar">
+                    <div class="card-title-row">
+                        <span class="card-label">Data Input</span>
+                        <span class="card-badge">Step 2</span>
+                    </div>
+
+                    <div class="drop-area" id="drop-area">
+                        <input type="file" id="file-input" accept=".tif,.tiff" class="input-file-hidden">
+                        <div class="drop-placeholder">
+                            <div class="drop-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                                    <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+                                    <path d="M12 12v9"></path>
+                                    <path d="m16 16-4-4-4 4"></path>
+                                </svg>
+                            </div>
+                            <p class="drop-main">Drop 12-channel GeoTIFF here</p>
+                            <span class="drop-sub">or click to browse (.tif, .tiff &bull; 128×128)</span>
+                        </div>
+
+                        <div class="file-chip" id="file-chip" style="display: none;">
+                            <div class="file-chip-info">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                </svg>
+                                <span class="file-chip-name" id="file-chip-name">filename.tif</span>
+                            </div>
+                            <button type="button" class="file-chip-remove" id="file-chip-remove" title="Remove file">&times;</button>
+                        </div>
+                    </div>
+
+                    <!-- Action Button -->
+                    <button type="button" id="btn-run" class="btn-action" disabled>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        <span>Run Water Segmentation</span>
+                    </button>
+
+                    <!-- Preloaded Test Scenes -->
+                    <div class="sample-tray">
+                        <div class="tray-header-row">
+                            <span class="tray-label">Quick Test Scenes</span>
+                            <span class="tray-hint">Click to evaluate</span>
+                        </div>
+                        <div class="tray-grid">
+                            <button type="button" class="tray-chip" data-id="3">
+                                <span class="chip-icon">🏞️</span>
+                                <span class="chip-type">River Channel</span>
+                                <span class="chip-title">Scene 3</span>
+                            </button>
+                            <button type="button" class="tray-chip" data-id="8">
+                                <span class="chip-icon">🌊</span>
+                                <span class="chip-type">Deep Lake</span>
+                                <span class="chip-title">Scene 8</span>
+                            </button>
+                            <button type="button" class="tray-chip" data-id="26">
+                                <span class="chip-icon">🏖️</span>
+                                <span class="chip-type">Coastline</span>
+                                <span class="chip-title">Scene 26</span>
+                            </button>
+                            <button type="button" class="tray-chip" data-id="48">
+                                <span class="chip-icon">🌿</span>
+                                <span class="chip-type">Wetland</span>
+                                <span class="chip-title">Scene 48</span>
+                            </button>
+                            <button type="button" class="tray-chip chip-arid" data-id="70">
+                                <span class="chip-icon">🏜️</span>
+                                <span class="chip-type chip-type-arid">Dry Land</span>
+                                <span class="chip-title">Scene 70</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Main Stage: Results & Inspector -->
+            <section class="stage">
+                <!-- Idle Blank Slate -->
+                <div class="slate-empty" id="slate-empty">
+                    <div class="slate-artwork">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                            <polyline points="2 17 12 22 22 17"></polyline>
+                            <polyline points="2 12 12 17 22 12"></polyline>
+                        </svg>
+                    </div>
+                    <h3>Multispectral Surface Hydrology</h3>
+                    <p>Select any test scene from the left tray or upload an optical GeoTIFF tile to calculate water extent, stream geometry, and pixel confidence.</p>
+                    <div class="slate-hint">
+                        <span>Tip: Press <kbd>Space</kbd> or click any sample scene to run</span>
+                    </div>
+                </div>
+
+                <!-- Processing Stepper (Animated Scientific Pipeline) -->
+                <div class="slate-busy" id="slate-busy" style="display: none;">
+                    <div class="radar-scanner">
+                        <div class="radar-sweep"></div>
+                        <div class="radar-ring ring-1"></div>
+                        <div class="radar-ring ring-2"></div>
+                        <div class="radar-ping"></div>
+                    </div>
+                    
+                    <div class="busy-header">
+                        <h4>Executing Spectral Delineation</h4>
+                        <p id="busy-sub">Initializing pipeline...</p>
+                    </div>
+
+                    <!-- 4-Stage Humanized Engineering Pipeline Checklist -->
+                    <div class="pipeline-stepper">
+                        <div class="pipe-step" id="pipe-step-1">
+                            <span class="step-icon">
+                                <span class="step-spinner"></span>
+                                <svg class="step-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </span>
+                            <span class="step-text">Ingesting 12-band Sentinel-2 Tensor (B01-B12 + DEM)</span>
+                        </div>
+                        <div class="pipe-step" id="pipe-step-2">
+                            <span class="step-icon">
+                                <span class="step-spinner"></span>
+                                <svg class="step-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </span>
+                            <span class="step-text">Synthesizing MNDWI, AWEI & Topographic Slopes</span>
+                        </div>
+                        <div class="pipe-step" id="pipe-step-3">
+                            <span class="step-icon">
+                                <span class="step-spinner"></span>
+                                <svg class="step-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </span>
+                            <span class="step-text">PyTorch Neural Forward Pass on CUDA</span>
+                        </div>
+                        <div class="pipe-step" id="pipe-step-4">
+                            <span class="step-icon">
+                                <span class="step-spinner"></span>
+                                <svg class="step-check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </span>
+                            <span class="step-text">Evaluating Decision Boundary (τ) & Pixel Contours</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Results Dashboard -->
+                <div class="dashboard" id="dashboard" style="display: none;">
+                    <!-- Top Bar: Metrics & Controls -->
+                    <div class="dashboard-bar">
+                        <div class="stat-cluster">
+                            <!-- Water Coverage -->
+                            <div class="stat-box">
+                                <span class="stat-label">Water Extent</span>
+                                <div class="stat-main">
+                                    <span class="stat-num stat-cyan" id="stat-pct">0.00%</span>
+                                    <span class="stat-tag" id="stat-water-type">Analyzing</span>
+                                </div>
+                                <div class="stat-track">
+                                    <div class="stat-fill" id="stat-bar" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <!-- Pixels Count -->
+                            <div class="stat-box">
+                                <span class="stat-label">Hydrological Pixels</span>
+                                <div class="stat-main">
+                                    <span class="stat-num" id="stat-water-px">0</span>
+                                    <span class="stat-unit">px</span>
+                                </div>
+                                <span class="stat-sub" id="stat-land-px">Land: 16,384 px</span>
+                            </div>
+
+                            <!-- Latency -->
+                            <div class="stat-box">
+                                <span class="stat-label">Inference Latency</span>
+                                <div class="stat-main">
+                                    <span class="stat-num stat-green" id="stat-latency">0.0</span>
+                                    <span class="stat-unit">ms</span>
+                                </div>
+                                <span class="stat-sub" id="stat-device">RTX 2080 CUDA</span>
+                            </div>
+
+                            <!-- Architecture -->
+                            <div class="stat-box">
+                                <span class="stat-label">Active Model</span>
+                                <span class="stat-title-tag" id="stat-model">SE-Res-UNet</span>
+                                <span class="stat-sub" id="stat-threshold">Threshold: τ = 0.30</span>
+                            </div>
+                        </div>
+
+                        <!-- Bar Actions -->
+                        <div class="dashboard-actions">
+                            <div class="view-switch">
+                                <button type="button" class="btn-toggle active" id="btn-view-grid" title="Side-by-side gallery">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="7" height="7"></rect>
+                                        <rect x="14" y="3" width="7" height="7"></rect>
+                                        <rect x="14" y="14" width="7" height="7"></rect>
+                                        <rect x="3" y="14" width="7" height="7"></rect>
+                                    </svg>
+                                    Gallery
+                                </button>
+                                <button type="button" class="btn-toggle" id="btn-view-slider" title="Interactive split comparison">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                        <line x1="12" y1="3" x2="12" y2="21"></line>
+                                    </svg>
+                                    Split View
+                                </button>
+                            </div>
+
+                            <a id="btn-download" class="btn-export" download="water_mask.png" title="Download 8-bit binary mask (PNG)">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                Export PNG
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Mode A: Side-by-Side Gallery Grid -->
+                    <div class="gallery-layout" id="view-gallery">
+                        <!-- Card 1: Optical True Color -->
+                        <div class="view-card" id="card-rgb">
+                            <div class="card-bar">
+                                <span class="card-caption">Optical Surface</span>
+                                <span class="badge-mini">B04 • B03 • B02</span>
+                            </div>
+                            <div class="zoom-box" data-target="rgb">
+                                <img id="img-rgb" alt="True Color Satellite Composite" class="crisp-image">
+                                <div class="pixel-hud" id="hud-rgb">X: -- Y: --</div>
+                            </div>
+                            <div class="card-meta-line">
+                                <span>Sentinel-2 True Color RGB</span>
+                                <span>128 × 128 px</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 2: Binary Mask -->
+                        <div class="view-card" id="card-mask">
+                            <div class="card-bar">
+                                <span class="card-caption">Binary Water Mask</span>
+                                <span class="badge-mini badge-mask">{0, 255}</span>
+                            </div>
+                            <div class="zoom-box" data-target="mask">
+                                <img id="img-mask" alt="Binary Mask" class="crisp-image">
+                                <div class="pixel-hud" id="hud-mask">X: -- Y: --</div>
+                            </div>
+                            <div class="card-meta-line">
+                                <span>White: Water &bull; Black: Land</span>
+                                <span id="mask-pixel-count">0 water px</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Hydro Overlay -->
+                        <div class="view-card view-card-highlight" id="card-overlay">
+                            <div class="card-bar">
+                                <span class="card-caption">Hydrological Overlay</span>
+                                <div class="overlay-tint-row">
+                                    <span class="tint-dot active" data-color="cyan" title="Cyan Hydro tint" style="background: #00f0ff;"></span>
+                                    <span class="tint-dot" data-color="emerald" title="Emerald Green tint" style="background: #10b981;"></span>
+                                    <span class="tint-dot" data-color="amber" title="High-vis Amber tint" style="background: #f59e0b;"></span>
+                                </div>
+                            </div>
+                            <div class="zoom-box" data-target="overlay">
+                                <img id="img-overlay" alt="Hydro Water Overlay" class="crisp-image">
+                                <div class="pixel-hud" id="hud-overlay">X: -- Y: --</div>
+                            </div>
+                            <div class="card-meta-line">
+                                <span>Boundary alignment check</span>
+                                <span class="coverage-pill" id="overlay-cov-tag">0.0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mode B: Interactive Split Comparison Slider -->
+                    <div class="split-layout" id="view-split" style="display: none;">
+                        <div class="split-container" id="split-box">
+                            <!-- Background Image (RGB Satellite) -->
+                            <img id="split-bg" alt="Satellite RGB" class="split-layer crisp-image">
+                            
+                            <!-- Foreground Clipped Image (Hydro Overlay) -->
+                            <div class="split-overlay-wrapper" id="split-clip">
+                                <img id="split-fg" alt="Water Delineation" class="split-layer crisp-image">
+                            </div>
+
+                            <!-- Draggable Split Divider Line & Handle -->
+                            <div class="split-handle" id="split-handle">
+                                <div class="handle-line"></div>
+                                <div class="handle-button" title="Drag to compare (or double-click to center)">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="15 18 9 12 15 6"></polyline>
+                                    </svg>
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <polyline points="9 18 15 12 9 6"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="handle-line"></div>
+                            </div>
+
+                            <!-- Left / Right Badges -->
+                            <span class="split-tag tag-left">Optical True Color</span>
+                            <span class="split-tag tag-right">Hydro Water Mask</span>
+                        </div>
+                        <p class="split-hint">Drag the vertical divider left or right to inspect water boundaries against true terrain (double-click handle to re-center).</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Sensor Specs Modal -->
+    <div class="modal-backdrop" id="modal-sensor">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="modal-tag">Sentinel-2 MSI + SRTM DEM</span>
+                    <h3>12-Band Multispectral Pipeline</h3>
+                </div>
+                <button type="button" class="btn-modal-close" id="btn-modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-desc">
+                    AquaSeg accepts 128×128 GeoTIFF tiles containing 12 co-registered spectral bands and topographic elevation. The neural model synthesizes surface reflectance and physical hydrological indices:
+                </p>
+
+                <!-- Bands Table -->
+                <div class="bands-table-wrap">
+                    <table class="bands-table">
+                        <thead>
+                            <tr>
+                                <th>Channel</th>
+                                <th>Band Name</th>
+                                <th>Central Wavelength</th>
+                                <th>Hydrological Purpose</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Ch 1</td><td>B01 (Coastal Aerosol)</td><td>443 nm</td><td>Atmospheric correction & coastal margin</td></tr>
+                            <tr><td>Ch 2</td><td>B02 (Blue)</td><td>490 nm</td><td>True Color Composite (B) & deep water</td></tr>
+                            <tr><td>Ch 3</td><td>B03 (Green)</td><td>560 nm</td><td>True Color (G) & <strong>MNDWI numerator</strong></td></tr>
+                            <tr><td>Ch 4</td><td>B04 (Red)</td><td>665 nm</td><td>True Color (R) & suspended sediment</td></tr>
+                            <tr><td>Ch 5</td><td>B05 (Red Edge 1)</td><td>705 nm</td><td>Aquatic vegetation boundary</td></tr>
+                            <tr><td>Ch 6</td><td>B06 (Red Edge 2)</td><td>740 nm</td><td>Canopy reflectance thresholding</td></tr>
+                            <tr><td>Ch 7</td><td>B07 (Red Edge 3)</td><td>783 nm</td><td>Vegetation plateau detection</td></tr>
+                            <tr><td>Ch 8</td><td>B08 (Broad NIR)</td><td>842 nm</td><td>High water absorption (NDWI denominator)</td></tr>
+                            <tr><td>Ch 9</td><td>B8A (Narrow NIR)</td><td>865 nm</td><td>Water/vegetation discrimination</td></tr>
+                            <tr><td>Ch 10</td><td>B09 (Water Vapour)</td><td>945 nm</td><td>Atmospheric column moisture</td></tr>
+                            <tr><td>Ch 11</td><td>B11 (SWIR 1)</td><td>1610 nm</td><td><strong>MNDWI absorption</strong> (Zero in water)</td></tr>
+                            <tr><td>Ch 12</td><td>DEM (Elevation)</td><td>Elevation (m)</td><td>Eliminates mountain shadow false positives</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Hydrological Indices Formulas -->
+                <div class="formula-cards">
+                    <div class="formula-box">
+                        <span class="formula-title">MNDWI (Modified NDWI)</span>
+                        <code>(B03 - B11) / (B03 + B11 + ε)</code>
+                        <span class="formula-note">Suppresses built-up and soil noise, highlights open water.</span>
+                    </div>
+                    <div class="formula-box">
+                        <span class="formula-title">AWEI_sh (Automated Shadow Index)</span>
+                        <code>B02 + 2.5·B03 - 1.5·(B08 + B11) - 0.25·B12</code>
+                        <span class="formula-note">Removes shadow confusion in mountainous and urban terrain.</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-action-sm" id="btn-modal-gotit">Understood</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modern Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Application Script -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

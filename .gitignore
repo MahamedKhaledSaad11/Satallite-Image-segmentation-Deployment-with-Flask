@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv/
+env/
+venv/
+ENV/
+
+# OS / Editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Large Model Checkpoints (>50MB / >100MB exceeds GitHub limits)
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/*.onnx
+checkpoints/*.bin
+*.pt
+*.pth
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
