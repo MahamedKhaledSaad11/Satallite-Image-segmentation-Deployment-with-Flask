@@ -53,8 +53,6 @@ deployment/
 
 ### 1. Launch the Web Application
 ```bash
-# Using conda environment:
-conda activate torch_gpu
 cd deployment
 python app.py
 ```
