@@ -146,5 +146,3 @@ Automated tests verified 4 real-world test scenes across varied hydrological top
 | **Scene 26**| Coastal Wetland | ~12.8% | 13.03% | 6.0 ms | **PASSED (HTTP 200)** |
 | **Scene 48**| Aquatic Wetland | ~1.1% | 12.81% | 8.1 ms | **PASSED (HTTP 200)** |
 | **Scene 70**| Arid Land (Negative Control) | 0.0% | **0.00% (Zero False Alarms)** | 58.4 ms | **PASSED (HTTP 200)** |
-
-*Full documentation available in [test_results.md](test_results.md).*
